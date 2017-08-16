@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+
+<plugin>
+    <extension id="arachne-factory" point="org.protege.editor.owl.inference_reasonerfactory">
+        <name value="Arachne"/>
+        <label value="Arachne"/>
+        <class value="org.geneontology.arachne.ArachneProtegeFactory"/>
+    </extension>
+</plugin>
