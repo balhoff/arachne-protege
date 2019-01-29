@@ -1,13 +1,5 @@
 package org.geneontology.arachne;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
-
 import org.apache.jena.query.QueryExecution;
 import org.apache.jena.query.QueryExecutionFactory;
 import org.apache.jena.query.QueryFactory;
@@ -15,52 +7,25 @@ import org.apache.jena.query.QuerySolution;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
 import org.geneontology.jena.OWLtoRules;
-import org.geneontology.rules.engine.BlankNode;
-import org.geneontology.rules.engine.Resource;
-import org.geneontology.rules.engine.Rule;
-import org.geneontology.rules.engine.RuleEngine;
-import org.geneontology.rules.engine.URI;
-import org.geneontology.rules.engine.WorkingMemory;
+import org.geneontology.rules.engine.*;
 import org.geneontology.rules.util.Bridge;
 import org.semanticweb.owlapi.apibinding.OWLManager;
-import org.semanticweb.owlapi.model.AxiomType;
-import org.semanticweb.owlapi.model.IRI;
-import org.semanticweb.owlapi.model.OWLAxiom;
-import org.semanticweb.owlapi.model.OWLClass;
-import org.semanticweb.owlapi.model.OWLClassAssertionAxiom;
-import org.semanticweb.owlapi.model.OWLClassExpression;
-import org.semanticweb.owlapi.model.OWLDataFactory;
-import org.semanticweb.owlapi.model.OWLDataProperty;
-import org.semanticweb.owlapi.model.OWLDataPropertyExpression;
-import org.semanticweb.owlapi.model.OWLException;
-import org.semanticweb.owlapi.model.OWLLiteral;
-import org.semanticweb.owlapi.model.OWLNamedIndividual;
-import org.semanticweb.owlapi.model.OWLObjectInverseOf;
-import org.semanticweb.owlapi.model.OWLObjectPropertyAssertionAxiom;
-import org.semanticweb.owlapi.model.OWLObjectPropertyExpression;
-import org.semanticweb.owlapi.model.OWLOntology;
-import org.semanticweb.owlapi.model.OWLOntologyChange;
-import org.semanticweb.owlapi.model.OWLOntologyChangeListener;
+import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.model.parameters.Imports;
-import org.semanticweb.owlapi.reasoner.BufferingMode;
-import org.semanticweb.owlapi.reasoner.FreshEntityPolicy;
-import org.semanticweb.owlapi.reasoner.IndividualNodeSetPolicy;
-import org.semanticweb.owlapi.reasoner.InferenceType;
 import org.semanticweb.owlapi.reasoner.Node;
-import org.semanticweb.owlapi.reasoner.NodeSet;
-import org.semanticweb.owlapi.reasoner.NullReasonerProgressMonitor;
-import org.semanticweb.owlapi.reasoner.OWLReasoner;
-import org.semanticweb.owlapi.reasoner.OWLReasonerConfiguration;
-import org.semanticweb.owlapi.reasoner.ReasonerProgressMonitor;
+import org.semanticweb.owlapi.reasoner.*;
 import org.semanticweb.owlapi.reasoner.impl.NodeFactory;
 import org.semanticweb.owlapi.reasoner.impl.OWLClassNodeSet;
 import org.semanticweb.owlapi.reasoner.impl.OWLNamedIndividualNodeSet;
 import org.semanticweb.owlapi.reasoner.structural.StructuralReasonerFactory;
 import org.semanticweb.owlapi.util.Version;
 import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
-
 import scala.collection.GenSet;
 import scala.collection.JavaConverters;
+
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 public class ArachneProtegeReasoner implements OWLReasoner {
 
@@ -162,10 +127,10 @@ public class ArachneProtegeReasoner implements OWLReasoner {
 			monitor.reasonerTaskStarted("Realizing Abox");
 			monitor.reasonerTaskBusy();
 			model.removeAll();
-			Set<org.geneontology.rules.engine.Triple> triples = ontology.getAxioms(AxiomType.OBJECT_PROPERTY_ASSERTION).stream().map(axiom -> asTriple(axiom)).collect(Collectors.toSet());
+			Set<Triple> triples = ontology.getAxioms(AxiomType.OBJECT_PROPERTY_ASSERTION).stream().map(axiom -> asTriple(axiom)).collect(Collectors.toSet());
 			triples.addAll(ontology.getAxioms(AxiomType.CLASS_ASSERTION).stream().flatMap(axiom -> asTriple(axiom).stream()).collect(Collectors.toSet()));
 			WorkingMemory wm = arachne.processTriples(JavaConverters.asScalaSet(triples));
-			for (org.geneontology.rules.engine.Triple triple : JavaConverters.setAsJavaSet(wm.facts())) {
+			for (Triple triple : JavaConverters.setAsJavaSet(wm.facts())) {
 				model.add(model.asStatement(Bridge.jenaFromTriple(triple)));
 			}
 			monitor.reasonerTaskStopped();
@@ -466,15 +431,17 @@ public class ArachneProtegeReasoner implements OWLReasoner {
 	}
 
 	@Override
-	public boolean isEntailed(OWLAxiom arg0) {
-		// TODO Auto-generated method stub
-		return false;
+	public boolean isEntailed(OWLAxiom axiom) {
+		if (axiom instanceof OWLClassAssertionAxiom) {
+			return asTriple(((OWLClassAssertionAxiom)axiom)).stream().map(t -> model.asStatement(Bridge.jenaFromTriple(t))).allMatch(s -> model.contains(s));
+		} else if (axiom instanceof OWLObjectPropertyAssertionAxiom) {
+			return model.contains(model.asStatement(Bridge.jenaFromTriple(asTriple((OWLObjectPropertyAssertionAxiom)axiom))));
+		} else return structuralReasoner.isEntailed(axiom);
 	}
 
 	@Override
-	public boolean isEntailed(Set<? extends OWLAxiom> arg0) {
-		// TODO Auto-generated method stub
-		return false;
+	public boolean isEntailed(Set<? extends OWLAxiom> axioms) {
+		return axioms.stream().allMatch(ax -> isEntailed(ax));
 	}
 
 	@Override
@@ -488,8 +455,37 @@ public class ArachneProtegeReasoner implements OWLReasoner {
 	}
 
 	@Override
-	public boolean isSatisfiable(OWLClassExpression arg0) {
-		return structuralReasoner.isSatisfiable(arg0);
+	public boolean isSatisfiable(OWLClassExpression cls) {
+		// First we handle the special case that a class assertion or object property assertion is being checked by the OWL API explanation tool.
+		// We need to include inferences made by the rule engine.
+		if (cls instanceof OWLObjectIntersectionOf) {
+			OWLObjectIntersectionOf intersection = (OWLObjectIntersectionOf)cls;
+			if (intersection.getOperands().size() == 2) {
+				List<OWLClassExpression> operands = intersection.getOperandsAsList();
+				OWLClassExpression first = operands.get(0);
+				OWLClassExpression second = operands.get(1);
+				final OWLObjectOneOf oneOf;
+				final OWLObjectComplementOf not;
+				if (first instanceof OWLObjectOneOf && second instanceof OWLObjectComplementOf) {
+					oneOf = (OWLObjectOneOf)first;
+					not = (OWLObjectComplementOf)second;
+				} else if (first instanceof OWLObjectComplementOf && second instanceof OWLObjectOneOf) {
+					oneOf = (OWLObjectOneOf)second;
+					not = (OWLObjectComplementOf)first;
+				} else {
+					oneOf = null;
+					not = null;
+				}
+				if (oneOf != null && not != null && oneOf.getIndividuals().size() == 1) {
+					OWLIndividual individual = oneOf.getIndividuals().iterator().next();
+					if (individual instanceof OWLNamedIndividual) {
+						OWLNamedIndividual named = (OWLNamedIndividual)individual;
+						return !(getInstances(not.getOperand(), false).getFlattened().contains(named));
+					}
+				}
+			}
+		}
+		return structuralReasoner.isSatisfiable(cls);
 	}
 
 	@Override
@@ -517,7 +513,7 @@ public class ArachneProtegeReasoner implements OWLReasoner {
 		return result;
 	}
 	
-	private org.geneontology.rules.engine.Triple asTriple(OWLObjectPropertyAssertionAxiom axiom) {
+	private Triple asTriple(OWLObjectPropertyAssertionAxiom axiom) {
 		final Resource subject;
 		if (axiom.getSubject().isNamed()) {
 			subject = new URI(axiom.getSubject().asOWLNamedIndividual().getIRI().toString());
@@ -539,11 +535,11 @@ public class ArachneProtegeReasoner implements OWLReasoner {
 		} else {
 			object = new BlankNode(axiom.getObject().asOWLAnonymousIndividual().getID().getID());
 		}
-		if (inverse) return new org.geneontology.rules.engine.Triple(object, property, subject);
-		else return new org.geneontology.rules.engine.Triple(subject, property, object); 
+		if (inverse) return new Triple(object, property, subject);
+		else return new Triple(subject, property, object); 
 	}
 	
-	private Set<org.geneontology.rules.engine.Triple> asTriple(OWLClassAssertionAxiom axiom) {
+	private Set<Triple> asTriple(OWLClassAssertionAxiom axiom) {
 		final Resource subject;
 		if (axiom.getIndividual().isNamed()) {
 			subject = new URI(axiom.getIndividual().asOWLNamedIndividual().getIRI().toString());
@@ -555,7 +551,7 @@ public class ArachneProtegeReasoner implements OWLReasoner {
 		} else {
 			URI cls = new URI(axiom.getClassExpression().asOWLClass().getIRI().toString());
 			URI rdfType = new URI(OWLRDFVocabulary.RDF_TYPE.getIRI().toString());
-			return Collections.singleton(new org.geneontology.rules.engine.Triple(subject, rdfType, cls));
+			return Collections.singleton(new Triple(subject, rdfType, cls));
 		}
 	}
 
