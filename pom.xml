@@ -4,7 +4,7 @@
 
 	<groupId>org.geneontology</groupId>
 	<artifactId>arachne-protege</artifactId>
-	<version>1.1.1.1-SNAPSHOT</version>
+	<version>1.2.0.1</version>
 	<packaging>bundle</packaging>
 
 	<name>Arachne plug-in for Protégé</name>
@@ -69,7 +69,7 @@
 		<dependency>
 			<groupId>org.geneontology</groupId>
 			<artifactId>arachne_2.12</artifactId>
-			<version>1.1.1</version>
+			<version>1.2</version>
 			<exclusions>
 				<exclusion>
 					<groupId>net.sourceforge.owlapi</groupId>
